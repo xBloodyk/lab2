@@ -1,7 +1,20 @@
 """Задачи второй части лабораторной: корреляционный анализ."""
 from __future__ import annotations
 
+import pandas as pd
+
 from grader_contracts.correlation_tasks import BrainCorrelationSummary, BrainDataInput
+
+FEATURES = ["FSIQ", "VIQ", "PIQ", "Weight", "Height"]
+TARGET = "MRI_Count"
+
+
+def _group_correlations(group: pd.DataFrame) -> dict[str, float]:
+    # Series.corr попарно отбрасывает строки с NaN
+    return {
+        f: float(group[f].corr(group[TARGET], method="pearson"))
+        for f in FEATURES
+    }
 
 
 def analyze_brain_correlations(data: BrainDataInput) -> BrainCorrelationSummary:
@@ -12,4 +25,29 @@ def analyze_brain_correlations(data: BrainDataInput) -> BrainCorrelationSummary:
     В strongest_mri_feature верните название признака с наибольшим модулем
     корреляции с MRI_Count среди объединённых результатов двух групп.
     """
-    raise NotImplementedError
+    df = pd.read_csv(data.csv_path, sep="\t", na_values=["NA"])
+    for col in FEATURES + [TARGET]:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    gender = df["Gender"].astype(str).str.strip().str.lower()
+    men = df[gender == "male"]
+    women = df[gender == "female"]
+
+    men_corr = _group_correlations(men)
+    women_corr = _group_correlations(women)
+
+    candidates = [
+        (abs(r), f)
+        for corr in (men_corr, women_corr)
+        for f, r in corr.items()
+        if pd.notna(r)
+    ]
+    strongest = max(candidates)[1]
+
+    return BrainCorrelationSummary(
+        men_count=int(len(men)),
+        women_count=int(len(women)),
+        women_mri_correlation=women_corr,
+        men_mri_correlation=men_corr,
+        strongest_mri_feature=strongest,
+    )
